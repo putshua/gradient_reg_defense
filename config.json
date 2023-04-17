@@ -1,0 +1,6 @@
+[
+    {"attack": "clean"},
+    {"attack": "fgsm", "eps": 8, "bb": false},
+    {"attack": "pgd", "eps": 8, "bb": false}
+]
+
