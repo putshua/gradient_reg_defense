@@ -1,0 +1,5 @@
+[2023-04-19 11:02:26,145][main_test.py][line:66][INFO] start testing!
+[2023-04-19 11:04:26,500][main_test.py][line:112][INFO] CLEAN acc=97.860
+[2023-04-19 11:06:36,656][main_test.py][line:109][INFO] FGSM eps=8/255 acc=87.247
+[2023-04-19 11:09:46,220][main_test.py][line:109][INFO] PGD eps=8/255 acc=100.000
+[2023-04-19 11:11:21,184][main_test.py][line:109][INFO] FGSM eps=8/255 acc=50.419
