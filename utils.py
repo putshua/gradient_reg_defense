@@ -8,47 +8,48 @@ import numpy as np
 import random
 import logging
 from torch.autograd import grad
-
-def train(model, device, train_loader, criterion, optimizer):
-    running_loss = 0
-    model.train()
-    total = 0
-    correct = 0
-    for i, (images, labels) in enumerate(tqdm(train_loader)):
-        optimizer.zero_grad()
-        labels = labels.to(device)
-        images = images.to(device)
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        running_loss += loss.item()
-        loss.mean().backward()
-        optimizer.step()
-        total += float(labels.size(0))
-        _, predicted = outputs.cpu().max(1)
-        correct += float(predicted.eq(labels.cpu()).sum().item())
-    return running_loss, 100 * correct / total
+# from trades import trades_loss
 
 
-def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-2):
+def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-2, co="l1",atk=None, dvs=False, trades=False):
     running_loss1 = 0
     running_loss2 = 0
-    l2_loss = nn.MSELoss()
+
     model.train()
     for i, (images, labels) in enumerate(tqdm(train_loader)):
         optimizer.zero_grad()
         labels = labels.to(device)
         images = images.to(device)
-        if lamb > 0:
-            ##
-            images.requires_grad_(True)
-            outputs = model(images)
-            f1 = outputs.gather(1, labels.unsqueeze(1)).squeeze() # choose
-            # f1 = outputs.mean(1) # mean
-            loss1 = criterion(outputs, labels)
-            
-            dx = grad(f1, images, grad_outputs=torch.ones_like(f1), retain_graph=True)[0]
-            images.requires_grad_(False)
-            
+
+        assert trades==False or atk==None
+
+        if dvs:
+            images = images.transpose(0, 1)
+
+        if atk is not None:
+            atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
+            images = atk(images, labels)
+            atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
+        ##
+        images.requires_grad_(True)
+
+        outputs = model(images)
+        out = outputs.gather(1, labels.unsqueeze(1)).squeeze() # choose
+        batch = []
+        inds = []
+        for i in range(len(outputs)):
+            mm, ind = torch.cat([outputs[i, :labels[i]], outputs[i, labels[i]+1:]], dim=0).max(0)
+            f = torch.exp(out[i]) / (torch.exp(out[i]) + torch.exp(mm))
+            batch.append(f)
+            inds.append(ind.item())
+        f1 = torch.stack(batch, dim=0)
+
+        loss1 = criterion(outputs, labels)
+        
+        dx = grad(f1, images, grad_outputs=torch.ones_like(f1, device=device), retain_graph=True)[0]
+        images.requires_grad_(False)
+
+        if co=="l2":
             v = dx.view(dx.shape[0], -1)
 
             # nv = v.norm(2, dim=-1, keepdim=True)
@@ -56,36 +57,43 @@ def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-
             # v[nz] = v[nz].div(nv[nz])
 
             v = v/v.norm(2, dim=-1, keepdim=True)
-            
             v = v.view(dx.shape).detach()
-            x2 = images + h*v
-
-            outputs = model(x2)
-            f2 = outputs.gather(1, labels.unsqueeze(1)).squeeze()
-
-            dl = (f2-f1)/h # This is the finite difference approximation of the directional derivative of the loss
-            
-            loss2 = dl.pow(2).mean()/2
-            loss = loss1 + lamb*loss2
         else:
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss1 = loss
-            loss2 = torch.tensor(0)
-        ##
+            v = dx.detach().sign()
+
+        x2 = images + h*v
+
+        outputs2 = model(x2)
+
+        out = outputs2.gather(1, labels.unsqueeze(1)).squeeze() # choose
+        batch = []
+        for i in range(len(outputs2)):
+            mm = torch.cat([outputs2[i, :labels[i]], outputs2[i, labels[i]+1:]], dim=0)[inds[i]]
+            f = torch.exp(out[i]) / (torch.exp(out[i]) + torch.exp(mm))
+            batch.append(f)
+        f2 = torch.stack(batch, dim=0)
+
+        dl = (f2-f1)/h
+        
+        loss2 = dl.pow(2).mean() # l2 loss
+
+        loss = loss1 + lamb*loss2
+
         running_loss1 += loss1.item()
         running_loss2 += loss2.item()
         loss.mean().backward()
         optimizer.step()
     return running_loss1, running_loss2
 
-
-def val(model, test_loader, device, atk=None):
+def val(model, test_loader, device, atk=None, dvs=False):
     correct = 0
     total = 0
     model.eval()
-    for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader)):
+    for batch_idx, (inputs, targets) in enumerate((test_loader)):
         inputs = inputs.to(device)
+        if dvs:
+            inputs = inputs.transpose(0, 1)
+            # inputs = inputs.flatten(0, 1).contiguous()
         if atk is not None:
             atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
             inputs = atk(inputs, targets.to(device))
@@ -97,23 +105,105 @@ def val(model, test_loader, device, atk=None):
     final_acc = 100 * correct / total
     return final_acc
 
-# todo
-def val_reg(model, test_loader, device):
-    pass
+def val_ensemble(model, test_loader, device, atk, dvs=False, poi=False):
     correct = 0
     total = 0
+    settings = [("bptt", 1, "zif"), ("bptt", 4., "sig"), ("bptt", 2., "atan"), ("bptr", 1., "zif")]
     model.eval()
     for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader)):
-        labels = labels.to(device)
-        images = images.to(device)
-        
-        outputs = model(inputs)
-        _, predicted = outputs.cpu().max(1)
+        inputs = inputs.to(device)
+        if dvs:
+            inputs = inputs.transpose(0, 1)
+            # inputs = inputs.flatten(0, 1).contiguous()
+        conf = []
+        for setting in settings:
+            model.set_attack_mode(setting)
+            
+            if atk is not None:
+                atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
+                if poi:
+                    atk_img = 0.
+                    for i in range(10):
+                        atk_img = atk(inputs, targets.to(device))
+                else:
+                    atk_img = atk(inputs, targets.to(device))
+            with torch.no_grad():
+                outputs = model(atk_img)
+            _, predicted = outputs.cpu().max(1)
+            conf.append(predicted.eq(targets).float())
 
+        conf = torch.stack(conf, dim=0)
+        conf = conf.min(0)[0]
+
+        correct += float(conf.sum().item())
         total += float(targets.size(0))
-        correct += float(predicted.eq(targets).sum().item())
+        # correct += float(predicted.eq(targets).sum().item())
     final_acc = 100 * correct / total
     return final_acc
+
+
+def val_sparsity(model, train_loader, device, criterion):
+    running_loss = 0
+    model.train()
+    M = len(train_loader)
+    total = 0
+    correct = 0
+    tt = 0.
+    vdic = model.init_dic()
+    for i, (images, labels) in enumerate(train_loader):
+        labels = labels.to(device)
+        images = images.to(device)
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        running_loss += loss.item()
+        loss.mean().backward()
+        
+        vdic = model._grad(vdic)
+        vdic = model._rate(vdic)
+        
+        total += float(labels.size(0))
+        _, predicted = outputs.cpu().max(1)
+        correct += float(predicted.eq(labels.cpu()).sum().item())
+    for k in vdic.keys():
+        vdic[k] = vdic[k]/len(train_loader)
+    
+    return running_loss, 100 * correct / total, vdic
+
+def val_reg(model, test_loader, device, dvs=False):
+    correct = 0
+    total = 0
+    loss = 0
+    model.eval()
+    for batch_idx, (images, labels) in enumerate(tqdm(test_loader)):
+        images = images.to(device)
+        images.requires_grad_(True)
+        
+        if dvs:
+            images = images.transpose(0, 1)
+            # images = images.flatten(0, 1).contiguous()
+
+        outputs = model(images)
+
+        _, predicted = outputs.cpu().max(1)
+        outputs = torch.softmax(outputs, dim=1)
+        f1 = outputs.gather(1, labels.to(device).unsqueeze(1)).squeeze() # choose
+        
+        dx = grad(f1, images, grad_outputs=torch.ones_like(f1, device=device))[0]
+        dx = dx.view(dx.shape[0], -1)
+        # ###############l0
+        dx = dx.norm(dim=-1,p=2).mean()
+        # ###############l2
+        # dx = dx.norm(dim=-1,p=0).mean()
+        # ###############
+        # images.requires_grad_(False)
+        loss += dx.item()
+
+        total += float(labels.size(0))
+        correct += float(predicted.eq(labels.long()).sum().item())
+
+    final_acc = 100 * correct / total
+    final_loss = loss / len(test_loader)
+    return final_acc, final_loss
 
 def val_success_rate(model, test_loader, device, atk=None):
     correct = 0
@@ -133,14 +223,13 @@ def val_success_rate(model, test_loader, device, atk=None):
         with torch.no_grad():
             outputs = model(inputs)
         _, predicted = outputs.cpu().max(1)
-        
+
         predicted = ~(predicted.eq(targets))
         total += mask.sum()
         correct += (predicted.float()*mask).sum()
 
     final_acc = 100 * correct / total
     return final_acc.item()
-
 
 def seed_all(seed=1029):
     random.seed(seed)

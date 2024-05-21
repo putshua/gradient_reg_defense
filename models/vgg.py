@@ -2,12 +2,12 @@ import torch.nn as nn
 import torch
 
 cfg = {
-    'VGG11': [
-        [64, 'M'],
-        [128, 'M'],
-        [256, 256, 'M'],
-        [512, 512, 'M'],
-        [512, 512, 'M']
+    'vgg11': [
+        [64, 'A'],
+        [128, 256, 'A'],
+        [512, 512, 512, 'A'],
+        [512, 512],
+        []
     ],
     'VGG13': [
         [64, 64, 'M'],
@@ -56,7 +56,7 @@ class TensorNormalization(nn.Module):
 
 
 class vgg(nn.Module):
-    def __init__(self, num_classes, norm, img_size=32, vgg_name="VGG16", dropout=0):
+    def __init__(self, num_classes, norm, img_size=32, vgg_name="vgg11", dropout=0):
         super(vgg, self).__init__()
         
         self.init_channels = 3
@@ -66,7 +66,12 @@ class vgg(nn.Module):
         self.layer4 = self._make_layers(cfg[vgg_name][3], dropout)
         self.layer5 = self._make_layers(cfg[vgg_name][4], dropout)
 
-        self.feat_size = int(img_size/32)**2
+        self.num_classes = num_classes
+
+        if vgg_name == "vgg11":
+            self.feat_size = 16
+        else:
+            self.feat_size = int(img_size/32)**2
 
         if norm is not None and isinstance(norm, tuple):
             self.norm = TensorNormalization(*norm)
@@ -96,7 +101,7 @@ class vgg(nn.Module):
     def _make_layers(self, cfg, dropout):
         layers = []
         for x in cfg:
-            if x == 'M':
+            if x == 'M' or x == 'A':
                 layers.append(nn.AvgPool2d(kernel_size=2, stride=2))
             else:
                 layers.append(nn.Conv2d(self.init_channels, x, kernel_size=3, padding=1))
@@ -106,6 +111,22 @@ class vgg(nn.Module):
                 self.init_channels = x
         return nn.Sequential(*layers)
 
+    def _grad(self, gd):
+        for name, module in self.named_modules():
+            if isinstance(module, nn.Conv2d):
+                grad = module.weight.grad.data
+                gd[name] += (1-((grad>0)*(grad<1e-6).float()).mean())
+        return gd
+    
+    
+    
+    def init_dic(self):
+        vdic = {}
+        for name, module in self.named_modules():
+            if isinstance(module, nn.Conv2d):
+                vdic[name] = 0
+        return vdic
+
     def forward(self, input):
         input = self.norm(input)
         out = self.layer1(input)
@@ -114,4 +135,6 @@ class vgg(nn.Module):
         out = self.layer4(out)
         out = self.layer5(out)
         out = self.classifier(out)
+        if self.num_classes == 1:
+            out = torch.sigmoid(out)
         return out
