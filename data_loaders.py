@@ -58,7 +58,7 @@ class Cutout(object):
 
         return img
 
-def build_cifar(use_cifar10=True, download=True):
+def cifar_dataset(use_cifar10=True, download=False):
     aug = [transforms.RandomCrop(32, padding=4), transforms.RandomHorizontalFlip(),transforms.ToTensor()]
 
     if use_cifar10:
@@ -66,8 +66,10 @@ def build_cifar(use_cifar10=True, download=True):
         transform_test = transforms.Compose([
             transforms.ToTensor(),
         ])
-        train_dataset = CIFAR10(root='E:\datasets', train=True, download=download, transform=transform_train)
-        val_dataset = CIFAR10(root='E:\datasets', train=False, download=download, transform=transform_test)
+        train_dataset = CIFAR10(root='E:\datasets',
+                                train=True, download=download, transform=transform_train)
+        val_dataset = CIFAR10(root='E:\datasets',
+                              train=False, download=download, transform=transform_test)
         norm = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     else:
         transform_train = transforms.Compose(aug)
@@ -81,7 +83,7 @@ def build_cifar(use_cifar10=True, download=True):
         norm = ((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
 
     return train_dataset, val_dataset, norm
-    
+
 class Cutout_dvs(object):
     """Randomly mask out one or more patches from an image.
     Args:
@@ -134,25 +136,25 @@ def function_nda(data, M=1, N=2):
 
 
     
-# def build_dvscifar(root):
-#     def trans_t(data):
-#         resize = transforms.Resize(size=(48, 48))  # 48 48
-#         data = torch.from_numpy(data) 
-#         data = resize(data).float()
-#         flip = random.random() > 0.5
-#         if flip:
-#             data = torch.flip(data, dims=(3,))
-#         data = function_nda(data)
-#         return data
+def build_dvscifar(root):
+    def trans_t(data):
+        resize = transforms.Resize(size=(48, 48))  # 48 48
+        data = torch.from_numpy(data) 
+        data = resize(data).float()
+        flip = random.random() > 0.5
+        if flip:
+            data = torch.flip(data, dims=(3,))
+        data = function_nda(data)
+        return data
     
-#     def tt(data):
-#         aug = transforms.Resize(size=(48, 48))
-#         data = torch.from_numpy(data)
-#         data = aug(data).float()
-#         return data
+    def tt(data):
+        aug = transforms.Resize(size=(48, 48))
+        data = torch.from_numpy(data)
+        data = aug(data).float()
+        return data
 
-#     data1 = CIFAR10DVS(root=root, data_type='frame', frames_number=10, split_by='number', transform=trans_t)
-#     train_dataset, _ = torch.utils.data.random_split(data1, [9000, 1000], generator=torch.Generator().manual_seed(42))
-#     data2 = CIFAR10DVS(root=root, data_type='frame', frames_number=10, split_by='number', transform=tt)
-#     _, val_dataset = torch.utils.data.random_split(data2, [9000, 1000], generator=torch.Generator().manual_seed(42))
-#     return train_dataset, val_dataset, None
+    data1 = CIFAR10DVS(root=root, data_type='frame', frames_number=10, split_by='number', transform=trans_t)
+    train_dataset, _ = torch.utils.data.random_split(data1, [9000, 1000], generator=torch.Generator().manual_seed(42))
+    data2 = CIFAR10DVS(root=root, data_type='frame', frames_number=10, split_by='number', transform=tt)
+    _, val_dataset = torch.utils.data.random_split(data2, [9000, 1000], generator=torch.Generator().manual_seed(42))
+    return train_dataset, val_dataset, None

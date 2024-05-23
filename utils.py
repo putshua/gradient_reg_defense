@@ -25,6 +25,7 @@ def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-
 
         if dvs:
             images = images.transpose(0, 1)
+            # images = images.flatten(0, 1).contiguous()
 
         if atk is not None:
             atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
