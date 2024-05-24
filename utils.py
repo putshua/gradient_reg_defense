@@ -11,7 +11,7 @@ from torch.autograd import grad
 # from trades import trades_loss
 
 
-def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-2, co="l1",atk=None, dvs=False, trades=False):
+def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-2,atk=None):
     running_loss1 = 0
     running_loss2 = 0
 
@@ -20,12 +20,6 @@ def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-
         optimizer.zero_grad()
         labels = labels.to(device)
         images = images.to(device)
-
-        assert trades==False or atk==None
-
-        if dvs:
-            images = images.transpose(0, 1)
-            # images = images.flatten(0, 1).contiguous()
 
         if atk is not None:
             atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
@@ -50,17 +44,7 @@ def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-
         dx = grad(f1, images, grad_outputs=torch.ones_like(f1, device=device), retain_graph=True)[0]
         images.requires_grad_(False)
 
-        if co=="l2":
-            v = dx.view(dx.shape[0], -1)
-
-            # nv = v.norm(2, dim=-1, keepdim=True)
-            # nz = nv.view(-1) > 0 # non-zero
-            # v[nz] = v[nz].div(nv[nz])
-
-            v = v/v.norm(2, dim=-1, keepdim=True)
-            v = v.view(dx.shape).detach()
-        else:
-            v = dx.detach().sign()
+        v = dx.detach().sign()
 
         x2 = images + h*v
 
@@ -76,7 +60,7 @@ def train_reg(model, device, train_loader, criterion, optimizer, lamb=0.1, h=1e-
 
         dl = (f2-f1)/h
         
-        loss2 = dl.pow(2).mean() # l2 loss
+        loss2 = dl.pow(2).mean()
 
         loss = loss1 + lamb*loss2
 
@@ -106,24 +90,21 @@ def val(model, test_loader, device, atk=None, dvs=False):
     final_acc = 100 * correct / total
     return final_acc
 
-def val_ensemble(model, test_loader, device, atk, dvs=False, poi=False):
+def val_ensemble(model, test_loader, device, atk, poi=False):
     correct = 0
     total = 0
     settings = [("bptt", 1, "zif"), ("bptt", 4., "sig"), ("bptt", 2., "atan"), ("bptr", 1., "zif")]
     model.eval()
     for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader)):
         inputs = inputs.to(device)
-        if dvs:
-            inputs = inputs.transpose(0, 1)
-            # inputs = inputs.flatten(0, 1).contiguous()
         conf = []
         for setting in settings:
             model.set_attack_mode(setting)
-            
             if atk is not None:
                 atk.set_training_mode(model_training=False, batchnorm_training=False, dropout_training=False)
                 if poi:
                     atk_img = 0.
+                    # EOT
                     for i in range(10):
                         atk_img = atk(inputs, targets.to(device))
                 else:
@@ -138,7 +119,7 @@ def val_ensemble(model, test_loader, device, atk, dvs=False, poi=False):
 
         correct += float(conf.sum().item())
         total += float(targets.size(0))
-        # correct += float(predicted.eq(targets).sum().item())
+
     final_acc = 100 * correct / total
     return final_acc
 
@@ -170,7 +151,7 @@ def val_sparsity(model, train_loader, device, criterion):
     
     return running_loss, 100 * correct / total, vdic
 
-def val_reg(model, test_loader, device, dvs=False):
+def val_reg(model, test_loader, device):
     correct = 0
     total = 0
     loss = 0
@@ -178,10 +159,6 @@ def val_reg(model, test_loader, device, dvs=False):
     for batch_idx, (images, labels) in enumerate(tqdm(test_loader)):
         images = images.to(device)
         images.requires_grad_(True)
-        
-        if dvs:
-            images = images.transpose(0, 1)
-            # images = images.flatten(0, 1).contiguous()
 
         outputs = model(images)
 
@@ -191,12 +168,7 @@ def val_reg(model, test_loader, device, dvs=False):
         
         dx = grad(f1, images, grad_outputs=torch.ones_like(f1, device=device))[0]
         dx = dx.view(dx.shape[0], -1)
-        # ###############l0
         dx = dx.norm(dim=-1,p=2).mean()
-        # ###############l2
-        # dx = dx.norm(dim=-1,p=0).mean()
-        # ###############
-        # images.requires_grad_(False)
         loss += dx.item()
 
         total += float(labels.size(0))

@@ -6,7 +6,7 @@ import sys
 import torch
 from torchattacks import PGD, FGSM, AutoAttack, APGD, RFGSM
 from attack import Uniform
-import data_loaders
+from data_loaders import cifar_dataset
 from snn_models import WideResNet, VGG
 from utils import *
 
@@ -18,6 +18,7 @@ parser.add_argument('-sd', '--seed',default=42,type=int,help='seed for initializ
 parser.add_argument('-suffix','--suffix',default='', type=str,help='suffix')
 
 # model configuration
+parser.add_argument('-data_dir', '--data_dir',default='E:\datasets',type=str,help='dataset path')
 parser.add_argument('-data', '--dataset', default='cifar10',type=str,help='dataset')
 parser.add_argument('-id', '--identifier', type=str, help='model statedict identifier')
 parser.add_argument('-config', '--config', default='', type=str,help='test configuration file')
@@ -37,7 +38,6 @@ parser.add_argument('-alpha', '--alpha',default=2.55/1,type=float,metavar='N',he
 parser.add_argument('-steps', '--steps',default=7,type=int,metavar='N',help='pgd attack steps')
 
 parser.add_argument('-bb', '--bbmodel',default='',type=str,help='black box model')
-parser.add_argument('-stdout', '--stdout',default='',type=str,help='log file')
 args = parser.parse_args()
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.device
@@ -46,32 +46,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def main():
     T = 8
     init_c=3
-    dvs=False
     if args.dataset.lower() == 'cifar10':
         num_labels = 10
-        img_size = 32
-        bi = False
-        train_dataset, val_dataset, znorm = data_loaders.build_cifar(use_cifar10=True)
+        train_dataset, val_dataset, znorm = cifar_dataset(args.data_dir, use_cifar10=True)
     elif args.dataset.lower() == 'cifar100':
-        train_dataset, val_dataset, znorm = data_loaders.build_cifar(use_cifar10=False)
+        train_dataset, val_dataset, znorm = cifar_dataset(args.data_dir, use_cifar10=False)
         num_labels = 100
-        img_size = 32
-        bi = False
-    elif args.dataset.lower() == "catsdogs":
-        train_dataset = data_loaders.CatsDogs(train=True)
-        val_dataset = data_loaders.CatsDogs(train=False)
-        num_labels = 1
-        img_size = 224
-        znorm = None
-        bi = True
-    elif 'dvscifar' in args.dataset.lower():
-        train_dataset, val_dataset, znorm = data_loaders.build_dvscifar(root='/home/butong/datasets/CIFAR10DVS/')
-        num_labels = 10
-        img_size = 48
-        bi = False
-        T = 10
-        init_c=2
-        dvs=True
+    else:
+        raise NotImplementedError
 
     seed_all(args.seed)
 
@@ -91,11 +73,6 @@ def main():
     else:
         model = VGG("vgg11", T, num_labels, znorm, args.tau, init_c)
     model.to(device)
-
-    if bi:
-        criterion = nn.MSELoss()
-    else:
-        criterion = nn.CrossEntropyLoss()
 
     if len(args.bbmodel) > 0:
         bbmodel = copy.deepcopy(model)
@@ -122,10 +99,8 @@ def main():
 
         if args.attack.lower() == 'fgsm':
             atk = FGSM(atkmodel, eps=args.eps / 255)
-        # yoga
         elif args.attack.lower() == 'rfgsm':
             atk = RFGSM(atkmodel, eps=args.eps / 255)
-        # yoga
         elif args.attack.lower() == 'pgd':
             atk = PGD(atkmodel, eps=args.eps / 255, alpha=args.alpha / 255, steps=args.steps)
         elif args.attack.lower() == 'autoattack':
@@ -151,13 +126,13 @@ def main():
             poi = False
 
         if atk is not None:
-            acc = val_ensemble(model, test_loader, device, atk, dvs, poi)
+            acc = val_ensemble(model, test_loader, device, atk, poi)
             if "FGSM" in args.attack.upper():
                 logger.info("{} eps={}/255 acc={:.3f} ".format(args.attack.upper(), args.eps, acc))
             else:
                 logger.info("{} eps={}/255 step={} acc={:.3f} ".format(args.attack.upper(), args.eps, args.steps, acc))
         else:
-            acc = val(model, test_loader, device, atk, dvs)
+            acc = val(model, test_loader, device, atk)
             logger.info("CLEAN acc={:.3f}".format(acc))
 
 if __name__ == "__main__":

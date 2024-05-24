@@ -1,0 +1,12 @@
+[
+    {"attack": "clean"},
+    {"attack": "fgsm", "eps": 8, "bb": false},
+    {"attack": "pgd", "eps": 8, "bb": false, "steps": 10},
+    {"attack": "pgd", "eps": 8, "bb": false, "steps": 30},
+    {"attack": "pgd", "eps": 8, "bb": false, "steps": 50},
+    {"attack": "fgsm", "eps": 8, "bb": true},
+    {"attack": "pgd", "eps": 8, "bb": true, "steps": 10},
+    {"attack": "pgd", "eps": 8, "bb": true, "steps": 30},
+    {"attack": "pgd", "eps": 8, "bb": true, "steps": 50}
+]
+
