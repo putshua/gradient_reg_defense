@@ -6,7 +6,7 @@ Implementation of Paper Enhancing Adversarial Robustness in SNNs with Sparse Gra
 
 ## Quick Start
 ### Requirements
-Please first intall [torchattacks]([torchattacks · PyPI](https://pypi.org/project/torchattacks/)) before running this project.
+Please first intall [torchattacks](https://pypi.org/project/torchattacks/) before running this project.
 
 ### How to train
 ```bash
