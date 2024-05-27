@@ -19,6 +19,11 @@ You can add your own configuration file to perform multiple attacks in one run, 
 python snn_main_test --data_dir=[YOUR_DATA_PATH] --dataset=[cifar10|cifar100] --identifier=[FILENAME_TOBE_EVALUATED] --model=[vgg11|wrn16] --config=[JSON FILE NAME]
 ```
 
+### checkpoints
+Download from [checkpoints](https://drive.google.com/drive/folders/196nQUljY01lCV5LYlgx-f5MK366uIId2?usp=sharing)
+
+Move checkpoints into directory `./[DATASETNAME]-checkpoints/` , e.g. `./cifar10-checkpoints/` before evaluating.
+
 ## Citations
 If you find the code useful, please cite our work.
 
