@@ -27,4 +27,11 @@ Move checkpoints into directory `./[DATASETNAME]-checkpoints/` , e.g. `./cifar10
 ## Citations
 If you find the code useful, please cite our work.
 
-[TODO]
+@inproceedings{liu2024enhancing,
+  title={Enhancing Adversarial Robustness in SNNs with Sparse Gradients},
+  author={Liu, Yujia and Bu, Tong and Ding, Jianhao and Hao, Zecheng and Huang, Tiejun and Yu, Zhaofei},
+  booktitle={International Conference on Machine Learning},
+  pages={30738--30754},
+  year={2024},
+  organization={PMLR}
+}
