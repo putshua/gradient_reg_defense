@@ -22,7 +22,9 @@ python snn_main_test --data_dir=[YOUR_DATA_PATH] --dataset=[cifar10|cifar100] --
 ### checkpoints
 Download from [checkpoints](https://drive.google.com/drive/folders/196nQUljY01lCV5LYlgx-f5MK366uIId2?usp=sharing)
 
-Move checkpoints into directory `./[DATASETNAME]-checkpoints/` , e.g. `./cifar10-checkpoints/` before evaluating.
+More checkpoints in [site2](https://disk.pku.edu.cn/link/AABD1D2719359B49E29BF2AA70FB6F1448)
+
+Move all checkpoints into directory `./[DATASETNAME]-checkpoints/` , e.g. `./cifar10-checkpoints/` before evaluating.
 
 ## Citations
 If you find the code useful, please cite our work.
