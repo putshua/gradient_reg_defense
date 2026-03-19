@@ -106,7 +106,8 @@ def val_ensemble(model, test_loader, device, atk, poi=False):
                     atk_img = 0.
                     # EOT
                     for i in range(10):
-                        atk_img = atk(inputs, targets.to(device))
+                        atk_img += atk(inputs, targets.to(device))
+                    atk_img /= 10.
                 else:
                     atk_img = atk(inputs, targets.to(device))
             with torch.no_grad():
